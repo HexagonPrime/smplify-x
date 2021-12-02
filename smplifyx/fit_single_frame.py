@@ -46,6 +46,8 @@ import fitting
 from human_body_prior.tools.model_loader import load_vposer
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 
+import json
+
 def fit_single_frame(img,
                      keypoints,
                      body_model,
@@ -508,18 +510,24 @@ def fit_single_frame(img,
         out_mesh.export(mesh_fn)
 
     if visualize:
-        
+
         script_dir = os.path.dirname(os.path.realpath(__file__))
         vertex_colors = np.loadtxt(os.path.join(script_dir, 'smplx_verts_colors.txt'))
         mesh_new = trimesh.Trimesh(vertices=out_mesh.vertices, faces=out_mesh.faces, vertex_colors=vertex_colors)
         mesh_new.vertex_colors = vertex_colors
-        
+
         save_dir_input = os.path.join(output_folder, 'input_images')
         save_dir_results = os.path.join(output_folder, 'rendered_smplifyx_meshes')
-        
+        save_dir_cameras = os.path.join(output_folder, 'camera_poses')
+        save_dir_smpl_params = os.path.join(output_folder, 'smpl_params')
+        save_dir_smplx_meshes = os.path.join(output_folder, 'smplx_meshes')
+
         os.makedirs(save_dir_input, exist_ok=True)
         os.makedirs(save_dir_results, exist_ok=True)
-        
+        os.makedirs(save_dir_cameras, exist_ok=True)
+        os.makedirs(save_dir_smpl_params, exist_ok=True)
+        os.makedirs(save_dir_smplx_meshes, exist_ok=True)
+
         fid = len(os.listdir(save_dir_input))
 
         camera_center = camera.center.detach().cpu().numpy().squeeze()
@@ -528,21 +536,21 @@ def fit_single_frame(img,
         # OpenGL compatible coordinate system.
         camera_transl[0] *= -1.0
 
-        if fid == 0:
-            camera_dict = {'camera_center': camera_center, 'camera_transl': camera_transl, 'focal_length': focal_length,
-                           'image_width': W, 'image_height': H}
-            with open(os.path.join(output_folder, 'camera.pkl'), 'wb') as f:
-                pickle.dump(camera_dict, f, pickle.HIGHEST_PROTOCOL)
-            with open(os.path.join(output_folder, 'smpl_params.pkl'), 'wb') as f:
-                pickle.dump(results[min_idx]['result'], f, pickle.HIGHEST_PROTOCOL)
-            mesh_new.export(os.path.join(output_folder, 'smplx_mesh.obj'))
+        # if fid == 0:
+        camera_dict = {'camera_center': camera_center, 'camera_transl': camera_transl, 'focal_length': focal_length,
+                        'image_width': W, 'image_height': H}
+        with open(os.path.join(save_dir_cameras, 'camera_pose_%05d.pkl' % fid), 'wb') as f:
+            pickle.dump(camera_dict, f, pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(save_dir_smpl_params, 'smpl_param_%05d.pkl' % fid), 'wb') as f:
+            pickle.dump(results[min_idx]['result'], f, pickle.HIGHEST_PROTOCOL)
+        mesh_new.export(os.path.join(save_dir_smplx_meshes, 'smplx_mesh_%05d.obj' % fid))
 
         input_img = img.detach().cpu().numpy()
         input_img = pil_img.fromarray((input_img * 255).astype(np.uint8))
         in_img_save_path = os.path.join(save_dir_input, '%05d.png' % fid)
         input_img.save(in_img_save_path)
         print("saved input image to %s" % in_img_save_path)
-        
+
         output_img = render_mesh(out_mesh, camera_center, camera_transl, focal_length, W, H)
         output_img = pil_img.fromarray(output_img)
         out_img_save_path = os.path.join(save_dir_results, '%05d.png' % fid)
